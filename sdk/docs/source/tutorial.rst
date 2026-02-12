@@ -517,8 +517,9 @@ This information can be useful when you want to analyze or visualize data within
 **Using time_units for convenient time ranges:**
 
 The :ref:`get_interval_array <get_interval_array_label>` method accepts an optional ``time_units`` parameter that lets you
-work with times in your preferred unit (seconds, milliseconds, microseconds, or nanoseconds). When you specify ``time_units``,
-both the input ``start``/``end`` parameters and the returned array use those units.
+work with times in your preferred unit (seconds, milliseconds, microseconds, or nanoseconds). When you specify ``time_units``
+with units other than nanoseconds ("us", "ms", "s"), both the input ``start``/``end`` parameters and the returned array
+use those units. The returned array will be float64 to preserve full precision from the underlying nanosecond storage.
 
 .. code-block:: python
 
@@ -540,15 +541,16 @@ Example output:
 
 .. code-block:: python
 
-   [[   0 1805]]
+   [[0.000000e+00 1.805555e+03]]
 
 In this example, we requested intervals for the first hour (0 to 3600 seconds) with ``time_units="s"``.
-The returned array is also in seconds, showing a continuous interval from second 0 to second 1805.
+The returned array is also in seconds (as float64), showing a continuous interval from second 0 to
+approximately second 1805.555. The float format preserves sub-second precision from the nanosecond source data.
 
-**Legacy behavior (nanoseconds):**
+**Working with nanoseconds (int64):**
 
-For backwards compatibility, if you don't specify ``time_units``, the method expects ``start``/``end`` in
-nanoseconds and returns intervals in nanoseconds:
+When you don't specify ``time_units`` (or explicitly set it to ``"ns"``), the method expects ``start``/``end`` in
+nanoseconds and returns intervals in nanoseconds as int64:
 
 .. code-block:: python
 
@@ -560,7 +562,7 @@ nanoseconds and returns intervals in nanoseconds:
 
    [[            0 1805555050000]]
 
-Here, the output shows times in nanoseconds. There is a single continuous interval of available data
+Here, the output shows times in nanoseconds as int64. There is a single continuous interval of available data
 for the specified measure and device, starting at epoch 0 and ending at epoch 1805555050000 nanoseconds.
 This is because there are no gaps in the source mit-bih data.
 
