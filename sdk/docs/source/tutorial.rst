@@ -409,6 +409,118 @@ For example, you might notice that some devices have missing information (e.g., 
 which you could then decide to update or investigate further. Additionally, you can use the device ids to query your
 dataset based on specific devices.
 
+Filtering Measures and Devices
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Both ``get_all_measures`` and ``get_all_devices`` accept optional filtering parameters to narrow
+the results to only those measures or devices that have actual data for a given source and/or time range.
+When called without any arguments, they behave exactly as before, returning everything in the dataset.
+
+**Filtering measures by device:**
+
+If you know which device you're interested in and want to find out what signals it recorded:
+
+.. code-block:: python
+
+   # Which measures does DeviceA have?
+   measures_on_device_a = sdk.get_all_measures(device_id=1)
+
+   # Or by tag
+   measures_on_device_a = sdk.get_all_measures(device_tag="DeviceA")
+
+**Filtering measures by patient:**
+
+.. code-block:: python
+
+   # Which measures were recorded for patient with MRN "PAT-001"?
+   measures_for_patient = sdk.get_all_measures(mrn="PAT-001")
+
+   # Or by patient_id
+   measures_for_patient = sdk.get_all_measures(patient_id=42)
+
+**Filtering with a time range:**
+
+You can also restrict results to a specific time window. When using ``start_time`` or ``end_time``,
+you must also specify ``time_units``:
+
+.. code-block:: python
+
+   # What measures does DeviceA have between hour 1 and hour 2?
+   measures_in_range = sdk.get_all_measures(
+       device_id=1,
+       start_time=3600,
+       end_time=7200,
+       time_units="s"
+   )
+
+   # What measures were recorded for a patient in a specific window?
+   measures_in_range = sdk.get_all_measures(
+       mrn="PAT-001",
+       start_time=0,
+       end_time=86400,
+       time_units="s"
+   )
+
+**Filtering devices by measure:**
+
+The reverse query — finding which devices recorded a particular signal — works the same way:
+
+.. code-block:: python
+
+   # Which devices have Heart Rate data?
+   devices_with_hr = sdk.get_all_devices(measure_id=1)
+
+   # Or by tag (with frequency and units for a specific match)
+   devices_with_hr = sdk.get_all_devices(
+       measure_tag="HeartRate", freq=250, freq_units="Hz", units="BPM"
+   )
+
+   # Which devices have Heart Rate data for patient "PAT-002"?
+   devices_for_patient_hr = sdk.get_all_devices(
+       measure_id=1, mrn="PAT-002"
+   )
+
+**Filtering devices by patient:**
+
+.. code-block:: python
+
+   # Which devices were used for this patient?
+   patient_devices = sdk.get_all_devices(mrn="PAT-001")
+
+**Time-only filtering (no device or patient):**
+
+You can also filter purely by time range to find which measures or devices have any data at all
+in a given window:
+
+.. code-block:: python
+
+   # What measures have data in the first hour?
+   measures_first_hour = sdk.get_all_measures(
+       start_time=0, end_time=3600, time_units="s"
+   )
+
+   # What devices have data in the first hour?
+   devices_first_hour = sdk.get_all_devices(
+       start_time=0, end_time=3600, time_units="s"
+   )
+
+.. note::
+
+   ``get_interval_array`` now also accepts an optional ``time_units`` parameter, so you no
+   longer need to manually convert start/end times to nanoseconds:
+
+   .. code-block:: python
+
+      # Before (nanoseconds)
+      intervals = sdk.get_interval_array(measure_id=1, device_id=1,
+          start=3600_000_000_000, end=7200_000_000_000)
+
+      # After (any supported unit)
+      intervals = sdk.get_interval_array(measure_id=1, device_id=1,
+          start=3600, end=7200, time_units="s")
+
+   The returned array is always in nanoseconds regardless of the ``time_units`` used for the query.
+
 Getting Data Availability
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 To obtain the availability of a specified measure (signal) and a specified source (device id or patient id),
