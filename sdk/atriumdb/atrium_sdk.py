@@ -5351,8 +5351,8 @@ of DatasetIterator objects depending on the value of num_iterators.
         >>> interval_arr = sdk.get_interval_array(measure_id=measure_id, device_id=device_id,
         ...     start=start_epoch_s, end=end_epoch_s, time_units="s")
         >>> interval_arr
-        array([[1669668855000000000, 1669668856000000000],
-        [1669668857000000000, 1669668858000000000]], dtype=int64)
+        array([[1669668855, 1669668856],
+        [1669668857, 1669668858]], dtype=int64)
 
         :param int measure_id: The measure identifier corresponding to the measures table in the
             linked relational database.
@@ -5375,11 +5375,13 @@ of DatasetIterator objects depending on the value of num_iterators.
         :param str device_tag: A string identifying the device. Exclusive with device_id.
         :param str mrn: Medical record number for the patient. Exclusive with patient_id.
             An int can be provided, but will be converted and stored as a string.
-        :param str time_units: The units for `start` and `end`. Options: ["ns", "us", "ms", "s"].
-            If None (default), `start` and `end` are interpreted as nanoseconds for backwards compatibility.
-            The returned array is always in nanoseconds regardless of this parameter.
+        :param str time_units: The units for `start`, `end`, and the returned array. Options: ["ns", "us", "ms", "s"].
+            If None (default), `start` and `end` are interpreted as nanoseconds and the returned array
+            is also in nanoseconds (for backwards compatibility). When specified, both input times and
+            output times use these units.
         :rtype: numpy.ndarray
-        :returns: A 2D array representing the availability of a specified measure. Times are always in nanoseconds.
+        :returns: A 2D array representing the availability of a specified measure. Times are in the units
+            specified by `time_units`, or nanoseconds if `time_units` is None.
 
         """
         # Convert start/end to nanoseconds if time_units is specified
@@ -5406,7 +5408,13 @@ of DatasetIterator objects depending on the value of num_iterators.
 
             params = {'measure_id': measure_id, 'device_id': device_id, 'patient_id': patient_id, 'start_time': start,
                       'end_time': end, 'gap_tolerance': gap_tolerance_nano}
-            return self._request("GET", "intervals", params=params)
+            result_arr = self._request("GET", "intervals", params=params)
+
+            # Convert from nanoseconds to requested time_units if specified
+            if time_units is not None and result_arr.size > 0:
+                result_arr = (result_arr / time_unit_options[time_units]).astype(np.int64)
+
+            return result_arr
 
         # Check the measure
         if measure_id is None:
@@ -5438,7 +5446,13 @@ of DatasetIterator objects depending on the value of num_iterators.
                 arr.append([cur_interval_start, cur_interval_end])
 
         # Convert the final intervals list to a numpy array with int64 data type
-        return np.array(arr, dtype=np.int64)
+        result_arr = np.array(arr, dtype=np.int64)
+
+        # Convert from nanoseconds to requested time_units if specified
+        if time_units is not None and result_arr.size > 0:
+            result_arr = (result_arr / time_unit_options[time_units]).astype(np.int64)
+
+        return result_arr
 
     def get_bed_id(self, bed_name: str) -> int | None:
         """

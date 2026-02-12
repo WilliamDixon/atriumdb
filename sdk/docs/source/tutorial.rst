@@ -504,23 +504,6 @@ in a given window:
        start_time=0, end_time=3600, time_units="s"
    )
 
-.. note::
-
-   ``get_interval_array`` now also accepts an optional ``time_units`` parameter, so you no
-   longer need to manually convert start/end times to nanoseconds:
-
-   .. code-block:: python
-
-      # Before (nanoseconds)
-      intervals = sdk.get_interval_array(measure_id=1, device_id=1,
-          start=3600_000_000_000, end=7200_000_000_000)
-
-      # After (any supported unit)
-      intervals = sdk.get_interval_array(measure_id=1, device_id=1,
-          start=3600, end=7200, time_units="s")
-
-   The returned array is always in nanoseconds regardless of the ``time_units`` used for the query.
-
 Getting Data Availability
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 To obtain the availability of a specified measure (signal) and a specified source (device id or patient id),
@@ -531,7 +514,11 @@ Each row of the 2D array output represents a continuous interval of available da
 representing the start epoch and end epoch of that interval, respectively.
 This information can be useful when you want to analyze or visualize data within specific time periods or when you need to identify gaps in the data.
 
-Here's an example of how to use the :ref:`get_interval_array <get_interval_array_label>` method:
+**Using time_units for convenient time ranges:**
+
+The :ref:`get_interval_array <get_interval_array_label>` method accepts an optional ``time_units`` parameter that lets you
+work with times in your preferred unit (seconds, milliseconds, microseconds, or nanoseconds). When you specify ``time_units``,
+both the input ``start``/``end`` parameters and the returned array use those units.
 
 .. code-block:: python
 
@@ -539,20 +526,43 @@ Here's an example of how to use the :ref:`get_interval_array <get_interval_array
    measure_id = 1
    device_id = 1
 
-   # Call the get_interval_array method
-   interval_arr = sdk.get_interval_array(measure_id=measure_id, device_id=device_id)
-
-   # Print the resulting 2D array
+   # Get intervals in seconds
+   interval_arr = sdk.get_interval_array(
+       measure_id=measure_id,
+       device_id=device_id,
+       start=0,
+       end=3600,  # First hour
+       time_units="s"
+   )
    print(interval_arr)
 
 Example output:
 
 .. code-block:: python
 
+   [[   0 1805]]
+
+In this example, we requested intervals for the first hour (0 to 3600 seconds) with ``time_units="s"``.
+The returned array is also in seconds, showing a continuous interval from second 0 to second 1805.
+
+**Legacy behavior (nanoseconds):**
+
+For backwards compatibility, if you don't specify ``time_units``, the method expects ``start``/``end`` in
+nanoseconds and returns intervals in nanoseconds:
+
+.. code-block:: python
+
+   # Call without time_units (legacy behavior)
+   interval_arr = sdk.get_interval_array(measure_id=measure_id, device_id=device_id)
+   print(interval_arr)
+
+.. code-block:: python
+
    [[            0 1805555050000]]
 
-In this example, the output shows that there is a single continuous interval of available data for the specified measure and device,
-starting at epoch 0 and ending at epoch 1805555050000. This is because there are no gaps in the source mit-bih data.
+Here, the output shows times in nanoseconds. There is a single continuous interval of available data
+for the specified measure and device, starting at epoch 0 and ending at epoch 1805555050000 nanoseconds.
+This is because there are no gaps in the source mit-bih data.
 
 These methods allow you to survey the data in your dataset and obtain information about the measures, devices, and data availability.
 By understanding the data availability, you can make informed decisions about how to process, analyze, or visualize the data in your dataset.
