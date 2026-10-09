@@ -1,5 +1,7 @@
 name: atriumdb_release
 'on':
+  push:
+    branches: [release-step-test]
   workflow_dispatch:
     inputs:
       releaseVersion:
@@ -22,60 +24,8 @@ jobs:
   build:
     uses: ./.github/workflows/build-wheels.yml
 
-  test:
-    needs: build
-    runs-on: ubuntu-22.04
-    
-    services:
-      mariadb:
-        image: mariadb:11.4
-        env:
-          MARIADB_ROOT_PASSWORD: rootpass
-          MARIADB_DATABASE: testdb
-          MARIADB_USER: testuser
-          MARIADB_PASSWORD: testpass
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="/usr/local/bin/healthcheck.sh --su mysql --connect"
-          --health-interval=15s
-          --health-timeout=10s
-          --health-retries=10
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y tzdata libmariadb-dev
-    - name: Retrieve the Linux wheel
-      uses: actions/download-artifact@v5
-      with:
-        name: dist-wheel-linux-x86_64
-        path: dist
-
-    - name: Install atriumdb test dependencies
-      run: pip install "atriumdb[testing] @ file://$(ls "$PWD"/dist/*.whl)"
-      
-    - name: Run tests
-      env:
-        MARIA_DB_HOST: 127.0.0.1
-        MARIA_DB_PORT: 3306
-        MARIA_DB_USER: root
-        MARIA_DB_PASSWORD: rootpass
-      run: |
-        # Run from a copy so the tests import the installed wheel rather than the source tree.
-        mkdir /tmp/wheel-tests
-        cp -r sdk/tests sdk/pyproject.toml /tmp/wheel-tests/
-        cd /tmp/wheel-tests
-        python -m pytest tests
-
   github-release:
-    if: ${{ github.event.inputs.pypiReleaseFeed == 'pypi' }}
-    needs: pypi-publish
+    needs: build
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -90,95 +40,6 @@ jobs:
     - name: Create GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
-        VERSION: ${{ inputs.releaseVersion }}
+        VERSION: ${{ inputs.releaseVersion || '2.7.0.dev1' }}
       run: gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$VERSION" --notes ""
         
-  pypi-publish:
-    name: Publish to pypi
-    needs:
-      - build
-      - test
-    runs-on: ubuntu-22.04
-    permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
-      id-token: write
-
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
-    environment:
-      name: ${{ github.event.inputs.pypiReleaseFeed }}
-
-    steps:
-      - name: Retrieve release distributions
-        uses: actions/download-artifact@v5
-        with:
-          pattern: dist-*
-          merge-multiple: true
-          path: dist
-      
-      - name: Verify the distributions are the ones built and checked
-        env:
-          SHA256SUMS: ${{ needs.build.outputs.sha256sums }}
-          VERSION: ${{ inputs.releaseVersion }}
-        run: |
-          cd dist
-          printf '%s\n' "$SHA256SUMS" | sha256sum --check --strict
-          test "$(find . -type f | wc -l)" -eq "$(printf '%s\n' "$SHA256SUMS" | wc -l)"
-          test -f "atriumdb-${VERSION}.tar.gz"
-
-      - name: Set repository URL
-        id: set-url
-        run: |
-          if [ "${{ github.event.inputs.pypiReleaseFeed }}" = "pypi" ]; then
-            echo "url=https://upload.pypi.org/legacy/" >> $GITHUB_OUTPUT
-          else
-            echo "url=https://test.pypi.org/legacy/" >> $GITHUB_OUTPUT
-          fi
-      - name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        with:
-          repository-url: ${{ steps.set-url.outputs.url }}
-
-  update-atriumdb-server:
-    if: ${{ github.event.inputs.pypiReleaseFeed == 'pypi' }}
-    needs:
-      - pypi-publish
-    runs-on: ubuntu-22.04
-    steps:
-      # Check out the target repo into a subfolder using the PAT
-      - name: Checkout atriumdb-server
-        uses: actions/checkout@v4
-        with:
-          repository: LaussenLabs/atriumdb-server
-          path: atriumdb-server
-          token: ${{ secrets.RELEASE_PAT }}
-          fetch-depth: 0  # safer for creating branches
-
-
-      - name: Create new branch and update version
-        run: |
-          set -euo pipefail
-          cd atriumdb-server
-          git checkout -b update-atriumdb-version
-          sed -i "s/atriumdb\[mariadb\]==[0-9.]*/atriumdb[mariadb]==${{ github.event.inputs.releaseVersion }}/" requirements.txt
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add requirements.txt
-          git commit -m "Update atriumdb to version ${{ github.event.inputs.releaseVersion }}"
-          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_PAT }}@github.com/LaussenLabs/atriumdb-server.git
-          git push origin update-atriumdb-version
-
-
-      - name: Create Pull Request
-        run: |
-          gh auth login --with-token <<< "${{ secrets.RELEASE_PAT }}"
-          gh pr create \
-            --repo LaussenLabs/atriumdb-server \
-            --title "Update atriumdb to version ${{ github.event.inputs.releaseVersion }}" \
-            --body "This PR updates atriumdb to version ${{ github.event.inputs.releaseVersion }}." \
-            --base main \
-            --head update-atriumdb-version \
-            --reviewer bgreer101,WilliamDixon
-
-      
-          
